@@ -1,6 +1,17 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ethers } from 'ethers';
+import {
+    waitForRemotePeer,
+    createLightNode,
+    createEncoder,
+    utf8ToBytes,
+    Decoder
+} from '@waku/sdk';
+import {
+  singleShardInfosToShardInfo,
+  singleShardInfoToPubsubTopic
+} from '@waku/utils';
 
 const bridgeContracts = {
     '279':       '0x53fa3006A40AA0Cb697736819485cE6D30DEAEb5', // BPX
@@ -13,8 +24,8 @@ const chainName = {
 };
 
 const abi = [
-  "event MessageCreated(uint256 chainId, address from, bytes message)",
-  "event MessageProcessed(uint256 chainId, bytes32 messageHash)",
+  "event MessageCreated(uint256 indexed chainId, address indexed from, bytes message)",
+  "event MessageProcessed(uint256 indexed chainId, bytes32 messageHash)",
   "function assetResolve(uint256 chainId, address contractLocal) view returns (address)",
   "function messageCheckSignatures(uint256 chainId, bytes32 messageHash, tuple(uint8 v, bytes32 r, bytes32 s)[8] signatures, uint64 sigEpoch) view returns (address[8])",
   "function messageGetRelayers(uint256 chainId, bytes32 messageHash, uint64 epoch) view returns (address[8])",
@@ -39,10 +50,12 @@ class App {
         
         this.srcContract = null;
         this.dstContract = null;
-        this.epoch = null;
+        this.epoch = 0; 
     }
     
     async run() {
+        const th = this;
+        
         try {
             this.log('info', 'Relayer is starting...');
             
@@ -71,27 +84,63 @@ class App {
             
             this.srcContract = new ethers.Contract(srcContractAddr, abi, this.srcProvider);
             this.dstContract = new ethers.Contract(dstContractAddr, abi, this.dstProvider);
-            const dstStatus = await this.dstContract.relayerGetStatus(srcChainId, this.wallet.address);
-            if(dstStatus[0] == false)
-                throw new Error('Relayer is inactive since epoch ' + dstStatus[1]);
-            this.log('info', 'Relayer is active since epoch ' + dstStatus[1]);
+            const relayerStatus = await this.dstContract.relayerGetStatus(srcChainId, this.wallet.address);
+            if(relayerStatus[0] == false)
+                throw new Error('Relayer inactive since epoch ' + relayerStatus[1]);
+            this.log('info', 'Relayer active since epoch ' + relayerStatus[1]);
             
-            const block = await this.srcProvider.getBlock('latest');
+            this.log('info', 'Connecting to Synapse P2P network...');
+            const singleShardInfo = {
+                clusterId: 279,
+                shard: 0
+            };
+            const shardInfo = singleShardInfosToShardInfo([singleShardInfo]);
+            
+            const synapse = await createLightNode({
+                bootstrapPeers: [
+                    '/dns4/synapse1.mainnet.bpxchain.cc/tcp/8000/wss/p2p/16Uiu2HAm55qUe3BFd2fA6UE6uWb38ByEck1KdfJ271S3ULSqa2iu'
+                ],
+                shardInfo: shardInfo
+            });
+            await synapse.start();
+            await waitForRemotePeer(synapse);
+            this.log('info', 'Connected to Synapse');
+            
+            const retryContentTopic = '/bridge/1/retry-' + srcChainId + '-' + dstChainId
+                + '-' + this.wallet.address + '/json';
+            const decoder = new Decoder(
+                singleShardInfoToPubsubTopic(singleShardInfo),
+                retryContentTopic
+            );
+            const subscription = await synapse.filter.createSubscription(
+                singleShardInfo
+            );
+            await subscription.subscribe(
+                [decoder],
+                function(msg) {
+                    th.onSynapseRetryMessage(msg);
+                }
+            );
+            this.log('info', 'Subscribed to content topic: ' + retryContentTopic);
+            
+            const block = await this.dstProvider.getBlock('latest');
             if(!block)
-                throw new Error('Cannot get latest block from source chain');
-            const epoch = this.timestampToEpoch(block.timestamp);
-            this.log('info', 'Current epoch is ' + epoch);
+                throw new Error('Cannot get latest destination chain block');
+            this.onDstNewBlock(block);
             
-            //this.handleNewEpoch(epoch);
+            this.dstProvider.on("block", async function(blockNumber) {
+                const block = await th.dstProvider.getBlock(blockNumber);
+                th.onDstNewBlock(block);
+            });
+            this.log('info', 'Subscribed to epoch updates');
             
-            
-            /*this.srcProvider.on("block", async function(blockNumber) {
-                let block = await th.srcProvider.getBlock(blockNumber);
-                console.log(block);
-                let currentEpoch = 
-                if(currentEpoch != th.epoch)
-                    th.newEpoch(currentEpoch);
-            });*/
+            this.srcContract.on(
+                this.srcContract.filters.MessageCreated(dstChainId),
+                function(chainId, from, message) {
+                    th.onSrcNewMessage(from, message);
+                }
+            );
+            this.log('info', 'Subscribed to source contract events');
         } catch(e) {
             this.log('error', e.message);
             process.exit(1);
@@ -102,9 +151,29 @@ class App {
         return Math.floor(timestamp / 60 / 20); // 20 minutes
     }
     
-    handleNewEpoch(epoch) {
-        console.log('New epoch: ' + epoch);
-        this.epoch = epoch;
+    onDstNewBlock(block) {
+        const newEpoch = this.timestampToEpoch(block.timestamp);
+        if(newEpoch <= this.epoch)
+            return;
+        
+        this.epoch = newEpoch;
+        this.log('info', 'New epoch: ' + newEpoch);
+    }
+    
+    async onSrcNewMessage(from, message) {
+        console.log('new msg');
+        
+        /*const encoder = createEncoder({
+              contentTopic: '/bridge/1/',
+              pubsubTopic: singleShardInfoToPubsubTopic(singleShardInfo)
+            });
+            
+            const request = await node.lightPush.send(encoder, {
+              payload: utf8ToBytes(text)
+            });*/
+    }
+    
+    async onSynapseRetryMessage(msg) {
     }
     
     log(level, msg) {
