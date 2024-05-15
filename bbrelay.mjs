@@ -48,9 +48,12 @@ class App {
         this.srcProvider = new ethers.JsonRpcProvider(options.srcRpc);
         this.dstProvider = new ethers.JsonRpcProvider(options.dstRpc);
         
+        this.srcChainId = null;
         this.srcContract = null;
         this.dstContract = null;
         this.epoch = 0; 
+        this.pubSubTopic = null;
+        this.synapse = null;
     }
     
     async run() {
@@ -59,22 +62,22 @@ class App {
         try {
             this.log('info', 'Relayer is starting...');
             
-            const srcChainId = (await this.srcProvider.getNetwork()).chainId;
-            if(typeof(chainName[srcChainId]) == 'undefined')
-                throw new Error('Unsupported source chain: ' + srcChainId);
-            this.log('info', 'Source chain: ' + chainName[srcChainId]);
+            this.srcChainId = (await this.srcProvider.getNetwork()).chainId;
+            if(typeof(chainName[this.srcChainId]) == 'undefined')
+                throw new Error('Unsupported source chain: ' + this.srcChainId);
+            this.log('info', 'Source chain: ' + chainName[this.srcChainId]);
             
             const dstChainId = (await this.dstProvider.getNetwork()).chainId;
             if(typeof(chainName[dstChainId]) == 'undefined')
                 throw new Error('Unsupported destination chain: ' + dstChainId);
             this.log('info', 'Destination chain: ' + chainName[dstChainId]);
             
-            if(srcChainId == dstChainId)
+            if(this.srcChainId == dstChainId)
                 throw new Error('Both chains have the same chainId');
-            if(srcChainId != 279 && dstChainId != 279)
+            if(this.srcChainId != 279 && dstChainId != 279)
                 throw new Error('Neither the source nor destination chain is BPX');
             
-            const srcContractAddr = bridgeContracts[srcChainId];
+            const srcContractAddr = bridgeContracts[this.srcChainId];
             this.log('info', 'Source contract: ' + srcContractAddr);
             
             const dstContractAddr = bridgeContracts[dstChainId];
@@ -84,7 +87,7 @@ class App {
             
             this.srcContract = new ethers.Contract(srcContractAddr, abi, this.srcProvider);
             this.dstContract = new ethers.Contract(dstContractAddr, abi, this.dstProvider);
-            const relayerStatus = await this.dstContract.relayerGetStatus(srcChainId, this.wallet.address);
+            const relayerStatus = await this.dstContract.relayerGetStatus(this.srcChainId, this.wallet.address);
             if(relayerStatus[0] == false)
                 throw new Error('Relayer inactive since epoch ' + relayerStatus[1]);
             this.log('info', 'Relayer active since epoch ' + relayerStatus[1]);
@@ -95,24 +98,25 @@ class App {
                 shard: 0
             };
             const shardInfo = singleShardInfosToShardInfo([singleShardInfo]);
+            this.pubSubTopic = singleShardInfoToPubsubTopic(singleShardInfo);
             
-            const synapse = await createLightNode({
+            this.synapse = await createLightNode({
                 bootstrapPeers: [
                     '/dns4/synapse1.mainnet.bpxchain.cc/tcp/8000/wss/p2p/16Uiu2HAm55qUe3BFd2fA6UE6uWb38ByEck1KdfJ271S3ULSqa2iu'
                 ],
                 shardInfo: shardInfo
             });
-            await synapse.start();
-            await waitForRemotePeer(synapse);
+            await this.synapse.start();
+            await waitForRemotePeer(this.synapse);
             this.log('info', 'Connected to Synapse');
             
-            const retryContentTopic = '/bridge/1/retry-' + srcChainId + '-' + dstChainId
+            const retryContentTopic = '/bridge/1/retry-' + this.srcChainId + '-' + dstChainId
                 + '-' + this.wallet.address + '/json';
             const decoder = new Decoder(
-                singleShardInfoToPubsubTopic(singleShardInfo),
+                this.pubSubTopic,
                 retryContentTopic
             );
-            const subscription = await synapse.filter.createSubscription(
+            const subscription = await this.synapse.filter.createSubscription(
                 singleShardInfo
             );
             await subscription.subscribe(
@@ -141,6 +145,11 @@ class App {
                 }
             );
             this.log('info', 'Subscribed to source contract events');
+            
+            this.onSrcNewMessage(
+                '0xFDb41A2e00db33D475436a7072A9e2115033cda3',
+                '0x000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000117000000000000000000000000000000000000000000000000000000000000008900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000602d550a4ca5eae83195486ac85dc40032daa787000000000000000000000000fdb41a2e00db33d475436a7072a9e2115033cda30000000000000000000000000000000000000000000000008ac7230489e80000'
+            );
         } catch(e) {
             this.log('error', e.message);
             process.exit(1);
@@ -161,19 +170,63 @@ class App {
     }
     
     async onSrcNewMessage(from, message) {
-        console.log('new msg');
+        this.log('info', 'New message from ' + from + ': ' + message);
         
-        /*const encoder = createEncoder({
-              contentTopic: '/bridge/1/',
-              pubsubTopic: singleShardInfoToPubsubTopic(singleShardInfo)
-            });
-            
-            const request = await node.lightPush.send(encoder, {
-              payload: utf8ToBytes(text)
-            });*/
+        const messageHash = ethers.keccak256(message);
+        this.log('info', 'Message hash: ' + messageHash);
+        
+        const relayers = await this.dstContract.messageGetRelayers(
+            this.srcChainId,
+            messageHash,
+            this.epoch
+        );
+        this.log('info', 'Selected relayers: ' + relayers);
+        
+        if(!relayers.includes(this.wallet.address)) {
+            this.log('info', 'Ignoring message - not on selected relayers list');
+            return;
+        }
+        
+        const epochHash = ethers.solidityKeccak256(
+            ['bytes32', 'uint64'],
+            [messageHash, this.epoch]
+        );
+        this.log('info', 'Epoch hash: ' + epochHash);
+        
+        const flatSig = await this.wallet.signMessage(epochHash);
+        const sig = ethers.splitSignature(flatSig);
+        this.log('info', 'Message signed');
+        
+        const response = {
+            messageHash: messageHash,
+            epoch: this.epoch,
+            v: sig.v,
+            r: sig.r,
+            s: sig.s
+        };
+        
+        const encoder = createEncoder({
+            contentTopic: '/bridge/1/client-' + from + '/json',
+            pubsubTopic: this.pubSubTopic
+        });
+        const request = await this.synapse.lightPush.send(encoder, {
+            payload: utf8ToBytes(JSON.stringify(response))
+        });
+        this.log('info', 'Signature published');
     }
     
-    async onSynapseRetryMessage(msg) {
+    async onSynapseRetryMessage(msgRaw) {
+        try {
+            const msg = JSON.parse(new TextDecoder().decode(msgRaw.payload));
+            
+            if(typeof msg.from != 'string' || typeof msg.message != 'string' || typeof msg.txid != 'string')
+                throw new Error('Invalid JSON message structure');
+            
+            const receipt = await this.srcProvider.getTransactionReceipt(msg.txid);
+            console.log(receipt);
+        } catch(e) {
+            this.log('error', 'Received corrupted retry message: ' + e.message);
+        }   
     }
     
     log(level, msg) {
