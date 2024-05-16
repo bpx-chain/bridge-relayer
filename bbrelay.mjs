@@ -111,7 +111,7 @@ class App {
             this.log('info', 'Connected to Synapse');
             
             const retryContentTopic = '/bridge/1/retry-' + this.srcChainId + '-' + dstChainId
-                + '-' + this.wallet.address + '/json';
+                + '-' + this.wallet.address.toLowerCase() + '/json';
             const decoder = new Decoder(
                 this.pubSubTopic,
                 retryContentTopic
@@ -187,26 +187,28 @@ class App {
             return;
         }
         
-        const epochHash = ethers.solidityKeccak256(
+        const epochHash = ethers.solidityPackedKeccak256(
             ['bytes32', 'uint64'],
             [messageHash, this.epoch]
         );
         this.log('info', 'Epoch hash: ' + epochHash);
         
-        const flatSig = await this.wallet.signMessage(epochHash);
-        const sig = ethers.splitSignature(flatSig);
-        this.log('info', 'Message signed');
+        const sig = ethers.Signature.from(
+            await this.wallet.signMessage(ethers.getBytes(epochHash))
+        );
         
         const response = {
             messageHash: messageHash,
             epoch: this.epoch,
             v: sig.v,
             r: sig.r,
-            s: sig.s
+            s: sig.s,
+            debug_relayer: this.wallet.address,
+            debug_relayerIndex: relayers.indexOf(this.wallet.address)
         };
         
         const encoder = createEncoder({
-            contentTopic: '/bridge/1/client-' + from + '/json',
+            contentTopic: '/bridge/1/client-' + from.toLowerCase() + '/json',
             pubsubTopic: this.pubSubTopic
         });
         const request = await this.synapse.lightPush.send(encoder, {
