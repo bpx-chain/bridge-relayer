@@ -2,25 +2,29 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { ethers } from 'ethers';
 import {
-    waitForRemotePeer,
-    createLightNode,
-    createEncoder,
-    utf8ToBytes,
-    Decoder
-} from '@waku/sdk';
+  createLightNode,
+  waitForRemotePeer,
+  createEncoder,
+  createDecoder,
+  utf8ToBytes
+} from '@bpx-chain/synapse-sdk';
 import {
   singleShardInfosToShardInfo,
   singleShardInfoToPubsubTopic
-} from '@waku/utils';
+} from '@bpx-chain/synapse-utils';
 
 const bridgeContracts = {
     '279':       '0x53fa3006A40AA0Cb697736819485cE6D30DEAEb5', // BPX
+    '42161':     '0x5CD1A383d9C881577dDF6E5E092Db25b2D50e9B3', // Arbitrum
     '137':       '0x5CD1A383d9C881577dDF6E5E092Db25b2D50e9B3', // Polygon
+    '43114':     '0x5CD1A383d9C881577dDF6E5E092Db25b2D50e9B3', // Avalanche
 };
 
 const chainName = {
     '279':       'BPX Chain',
+    '42161':     'Arbitrum',
     '137':       'Polygon',
+    '43114':     'Avalanche C-Chain',
 };
 
 const abi = [
@@ -112,20 +116,17 @@ class App {
             
             const retryContentTopic = '/bridge/1/retry-' + this.srcChainId + '-' + dstChainId
                 + '-' + this.wallet.address.toLowerCase() + '/json';
-            const decoder = new Decoder(
-                this.pubSubTopic,
-                retryContentTopic
+            const decoder = createDecoder(
+                retryContentTopic,
+                this.pubSubTopic
             );
-            const subscription = await this.synapse.filter.createSubscription(
-                singleShardInfo
-            );
-            await subscription.subscribe(
+            const subscription = await this.synapse.filter.subscribe(
                 [decoder],
                 function(msg) {
                     th.onSynapseRetryMessage(msg);
                 }
             );
-            this.log('info', 'Subscribed to content topic: ' + retryContentTopic);
+            this.log('info', 'Subscribed to retry topic: ' + retryContentTopic);
             
             const block = await this.dstProvider.getBlock('latest');
             if(!block)
@@ -145,11 +146,6 @@ class App {
                 }
             );
             this.log('info', 'Subscribed to source contract events');
-            
-            this.onSrcNewMessage(
-                '0xFDb41A2e00db33D475436a7072A9e2115033cda3',
-                '0x000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000117000000000000000000000000000000000000000000000000000000000000008900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000602d550a4ca5eae83195486ac85dc40032daa787000000000000000000000000fdb41a2e00db33d475436a7072a9e2115033cda30000000000000000000000000000000000000000000000008ac7230489e80000'
-            );
         } catch(e) {
             this.log('error', e.message);
             process.exit(1);
@@ -223,6 +219,13 @@ class App {
             
             if(typeof msg.from != 'string' || typeof msg.message != 'string' || typeof msg.txid != 'string')
                 throw new Error('Invalid JSON message structure');
+            
+            /*if(!msg.from.match(/^0x[0-9a-fA-F]{40}$/))
+                throw new Error('Validation failed: from');
+            if(!msg.message.match(^0x[0-9a-fA-F]{128,1024}$/))
+                throw new Error('Validation failed: message');
+            if(!msg.txid.match(^0x[0-9a-fA-F]{64}$/))
+                throw new Error('Validation failed: txid');*/
             
             const receipt = await this.srcProvider.getTransactionReceipt(msg.txid);
             console.log(receipt);
