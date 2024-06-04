@@ -2,15 +2,15 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { ethers } from 'ethers';
 import {
-  createLightNode,
-  waitForRemotePeer,
-  createEncoder,
-  createDecoder,
-  utf8ToBytes
+    createLightNode,
+    waitForRemotePeer,
+    createEncoder,
+    createDecoder,
+    utf8ToBytes
 } from '@bpx-chain/synapse-sdk';
 import {
-  singleShardInfosToShardInfo,
-  singleShardInfoToPubsubTopic
+    singleShardInfosToShardInfo,
+    singleShardInfoToPubsubTopic
 } from '@bpx-chain/synapse-utils';
 
 const bridgeContracts = {
@@ -28,35 +28,41 @@ const chainName = {
 };
 
 const abi = [
-  "event MessageCreated(uint256 indexed chainId, address indexed from, bytes message)",
-  "event MessageProcessed(uint256 indexed chainId, bytes32 messageHash)",
-  "function assetResolve(uint256 chainId, address contractLocal) view returns (address)",
-  "function messageCheckSignatures(uint256 chainId, bytes32 messageHash, tuple(uint8 v, bytes32 r, bytes32 s)[8] signatures, uint64 sigEpoch) view returns (address[8])",
-  "function messageGetRelayers(uint256 chainId, bytes32 messageHash, uint64 epoch) view returns (address[8])",
-  "function messageProcess(bytes message, tuple(uint8 v, bytes32 r, bytes32 s)[8] signatures, uint64 sigEpoch) payable",
-  "function relayerActivate(uint256 chainId) payable",
-  "function relayerDeactivate(uint256 chainId)",
-  "function relayerGetBalance(uint256 chainId, address relayerAddr) view returns (uint256)",
-  "function relayerGetStake(address relayerAddr) view returns (uint256)",
-  "function relayerGetStatus(uint256 chainId, address relayerAddr) view returns (bool, uint64)",
-  "function relayerGetWithdrawalMax(uint256 chainId, address relayerAddr) view returns (uint256)",
-  "function relayerWithdraw(uint256 chainId, address to, uint256 value)",
-  "function setOwner(address _owner)",
-  "function transfer(uint256 dstChainId, address dstAddress) payable",
-  "function transferERC20(address srcContract, uint256 dstChainId, address dstAddress, uint256 value)"
+    "event MessageCreated(uint256 indexed chainId, address indexed from, bytes message)",
+    "event MessageProcessed(uint256 indexed chainId, bytes32 messageHash)",
+    "function assetResolve(uint256 chainId, address contractLocal) view returns (address)",
+    "function messageCheckSignatures(uint256 chainId, bytes32 messageHash, tuple(uint8 v, bytes32 r, bytes32 s)[8] signatures, uint64 sigEpoch) view returns (address[8])",
+    "function messageGetRelayers(uint256 chainId, bytes32 messageHash, uint64 epoch) view returns (address[8])",
+    "function messageProcess(bytes message, tuple(uint8 v, bytes32 r, bytes32 s)[8] signatures, uint64 sigEpoch) payable",
+    "function relayerActivate(uint256 chainId) payable",
+    "function relayerDeactivate(uint256 chainId)",
+    "function relayerGetBalance(uint256 chainId, address relayerAddr) view returns (uint256)",
+    "function relayerGetStake(address relayerAddr) view returns (uint256)",
+    "function relayerGetStatus(uint256 chainId, address relayerAddr) view returns (bool, uint64)",
+    "function relayerGetWithdrawalMax(uint256 chainId, address relayerAddr) view returns (uint256)",
+    "function relayerWithdraw(uint256 chainId, address to, uint256 value)",
+    "function setOwner(address _owner)",
+    "function transfer(uint256 dstChainId, address dstAddress) payable",
+    "function transferERC20(address srcContract, uint256 dstChainId, address dstAddress, uint256 value)"
 ];
 
 class App {
     constructor(options) {
         this.wallet = new ethers.Wallet(options.walletKey);
-        this.srcProvider = new ethers.JsonRpcProvider(options.srcRpc);
-        this.dstProvider = new ethers.JsonRpcProvider(options.dstRpc);
+        if(options.srcRpc.startsWith('ws'))
+            this.srcProvider = new ethers.WebSocketProvider(options.srcRpc);
+        else
+            this.srcProvider = new ethers.JsonRpcProvider(options.srcRpc, null, { batchMaxCount: 10 });
+        if(options.dstRpc.startsWith('ws'))
+            this.dstProvider = new ethers.WebSocketProvider(options.dstRpc);
+        else
+            this.dstProvider = new ethers.JsonRpcProvider(options.dstRpc, null, { batchMaxCount: 10 });
         
         this.srcChainId = null;
         this.srcContract = null;
         this.dstContract = null;
         this.epoch = 0; 
-        this.pubSubTopic = null;
+        this.pubsubTopic = null;
         this.synapse = null;
     }
     
@@ -102,11 +108,12 @@ class App {
                 shard: 0
             };
             const shardInfo = singleShardInfosToShardInfo([singleShardInfo]);
-            this.pubSubTopic = singleShardInfoToPubsubTopic(singleShardInfo);
+            this.pubsubTopic = singleShardInfoToPubsubTopic(singleShardInfo);
             
             this.synapse = await createLightNode({
                 bootstrapPeers: [
-                    '/dns4/synapse1.mainnet.bpxchain.cc/tcp/8000/wss/p2p/16Uiu2HAm55qUe3BFd2fA6UE6uWb38ByEck1KdfJ271S3ULSqa2iu'
+                    '/dns4/synapse1.mainnet.bpxchain.cc/tcp/8000/wss/p2p/16Uiu2HAm55qUe3BFd2fA6UE6uWb38ByEck1KdfJ271S3ULSqa2iu',
+                    '/dns4/synapse2.mainnet.bpxchain.cc/tcp/8000/wss/p2p/16Uiu2HAmQ3HRNNo6ESF5jW6VBLkrcZ8ECoZ2guGwdmZVZDsksvmP'
                 ],
                 shardInfo: shardInfo
             });
@@ -118,7 +125,7 @@ class App {
                 + '-' + this.wallet.address.toLowerCase() + '/json';
             const decoder = createDecoder(
                 retryContentTopic,
-                this.pubSubTopic
+                this.pubsubTopic
             );
             const subscription = await this.synapse.filter.subscribe(
                 [decoder],
@@ -157,6 +164,7 @@ class App {
     }
     
     onDstNewBlock(block) {
+    console.log(block);
         const newEpoch = this.timestampToEpoch(block.timestamp);
         if(newEpoch <= this.epoch)
             return;
@@ -166,72 +174,89 @@ class App {
     }
     
     async onSrcNewMessage(from, message) {
-        this.log('info', 'New message from ' + from + ': ' + message);
-        
-        const messageHash = ethers.keccak256(message);
-        this.log('info', 'Message hash: ' + messageHash);
-        
-        const relayers = await this.dstContract.messageGetRelayers(
-            this.srcChainId,
-            messageHash,
-            this.epoch
-        );
-        this.log('info', 'Selected relayers: ' + relayers);
-        
-        if(!relayers.includes(this.wallet.address)) {
-            this.log('info', 'Ignoring message - not on selected relayers list');
-            return;
+        try {
+            this.log('info', 'New message from ' + from + ': ' + message);
+            
+            const messageHash = ethers.keccak256(message);
+            this.log('info', 'Message hash: ' + messageHash);
+            
+            const relayers = await this.dstContract.messageGetRelayers(
+                this.srcChainId,
+                messageHash,
+                this.epoch
+            );
+            this.log('info', 'Selected relayers: ' + relayers);
+            
+            if(!relayers.includes(this.wallet.address)) {
+                this.log('info', 'Ignoring message - not on selected relayers list');
+                return;
+            }
+            
+            const epochHash = ethers.solidityPackedKeccak256(
+                ['bytes32', 'uint64'],
+                [messageHash, this.epoch]
+            );
+            this.log('info', 'Epoch hash: ' + epochHash);
+            
+            const sig = ethers.Signature.from(
+                await this.wallet.signMessage(ethers.getBytes(epochHash))
+            );
+            
+            const response = {
+                messageHash: messageHash,
+                epoch: this.epoch,
+                v: sig.v,
+                r: sig.r,
+                s: sig.s,
+                debug_relayer: this.wallet.address,
+                debug_relayerIndex: relayers.indexOf(this.wallet.address)
+            };
+            
+            const encoder = createEncoder({
+                contentTopic: '/bridge/1/client-' + from.toLowerCase() + '/json',
+                pubsubTopic: this.pubsubTopic
+            });
+            const result = await this.synapse.lightPush.send(encoder, {
+                payload: utf8ToBytes(JSON.stringify(response))
+            });
+            if(!result.successes.length)
+                throw new Error('Failed to push message');
+            this.log('info', 'Signature published');
         }
-        
-        const epochHash = ethers.solidityPackedKeccak256(
-            ['bytes32', 'uint64'],
-            [messageHash, this.epoch]
-        );
-        this.log('info', 'Epoch hash: ' + epochHash);
-        
-        const sig = ethers.Signature.from(
-            await this.wallet.signMessage(ethers.getBytes(epochHash))
-        );
-        
-        const response = {
-            messageHash: messageHash,
-            epoch: this.epoch,
-            v: sig.v,
-            r: sig.r,
-            s: sig.s,
-            debug_relayer: this.wallet.address,
-            debug_relayerIndex: relayers.indexOf(this.wallet.address)
-        };
-        
-        const encoder = createEncoder({
-            contentTopic: '/bridge/1/client-' + from.toLowerCase() + '/json',
-            pubsubTopic: this.pubSubTopic
-        });
-        const request = await this.synapse.lightPush.send(encoder, {
-            payload: utf8ToBytes(JSON.stringify(response))
-        });
-        this.log('info', 'Signature published');
+        catch(e) {
+            this.log('error', 'Exception in message processing: ' + e.message);
+            setTimeout(() => { this.onSrcNewMessage(from, message) }, 3000);
+        }
     }
     
     async onSynapseRetryMessage(msgRaw) {
+        let msg;
+        
         try {
             const msg = JSON.parse(new TextDecoder().decode(msgRaw.payload));
             
-            if(typeof msg.from != 'string' || typeof msg.message != 'string' || typeof msg.txid != 'string')
+            if(typeof msg.transactionHash != 'string')
                 throw new Error('Invalid JSON message structure');
             
-            /*if(!msg.from.match(/^0x[0-9a-fA-F]{40}$/))
-                throw new Error('Validation failed: from');
-            if(!msg.message.match(^0x[0-9a-fA-F]{128,1024}$/))
-                throw new Error('Validation failed: message');
-            if(!msg.txid.match(^0x[0-9a-fA-F]{64}$/))
-                throw new Error('Validation failed: txid');*/
+            if(!msg.transactionHash.match(/^0x[0-9a-fA-F]{64}$/))
+                throw new Error('Validation error: transactionHash');
             
-            const receipt = await this.srcProvider.getTransactionReceipt(msg.txid);
+            let receipt;
+            try {
+                receipt = await this.srcProvider.getTransactionReceipt(msg.txid);
+            } catch(e) {
+                setTimeout(() => { this.onSynapseRetryMessage(msgRaw) }, 3000);
+                throw e;
+            }
+        
+            if(receipt === null)
+                throw new Error('Transaction receipt is null');
+            
             console.log(receipt);
-        } catch(e) {
-            this.log('error', 'Received corrupted retry message: ' + e.message);
-        }   
+        }
+        catch(e) {
+            this.log('error', 'Exception in retry request processing: ' + e.message);
+        }
     }
     
     log(level, msg) {
