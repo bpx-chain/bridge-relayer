@@ -3,6 +3,7 @@ import SrcChain from './SrcChain.js';
 import DstChain from './DstChain.js';
 import Wallet from './Wallet.js';
 import Synapse from './Synapse.js';
+import Database from './Database.js';
 import { homeChainId } from './configs/chains.js';
 
 export default class App {
@@ -13,6 +14,7 @@ export default class App {
         this.dstChain = new DstChain(options.dstRpc);
         this.wallet = new Wallet(options.walletKey);
         this.synapse = new Synapse();
+        this.database = new Database();
     }
     
     async run() {
@@ -41,5 +43,8 @@ export default class App {
         
         if(!await this.synapse.start(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address))
             process.exit(6);
+        
+        if(!await this.database.start(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address))
+            process.exit(7);
     }
 }
