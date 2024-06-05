@@ -16,7 +16,7 @@ npm install
 # Usage
 
 ```bash
-$ node bbrelay.mjs -h
+$ node bbrelay.mj -h
 Usage: bbrelay [options]
 
 BPX Bridge relayer
