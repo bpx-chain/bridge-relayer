@@ -69,7 +69,7 @@ export default class Synapse {
             if(dbMessage.executed)
                 throw new Error('Message already processed');
             
-            await signer.maybeSign(msg.messageHash, msg.userWallet);
+            await signer.maybeSign(dbMessage.messageHash, dbMessage.userWallet);
         }
         catch(e) {
             this.log.warn('Exception in retry request processing: ' + e.message);
