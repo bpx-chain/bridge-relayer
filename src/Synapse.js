@@ -96,9 +96,9 @@ export default class Synapse {
         const msg = {
             messageHash,
             epoch: epoch,
-            v: sig.v,
-            r: sig.r,
-            s: sig.s
+            v: signature.v,
+            r: signature.r,
+            s: signature.s
         };
         
         const encoder = createEncoder({
