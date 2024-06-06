@@ -61,18 +61,20 @@ export default class Chain {
     }
     
     async syncFetchEventsBatch(filter, startBlock, endBlock) {
-        try {
-            return await this.contract.queryFilter(
-                filter,
-                startBlock,
-                endBlock
-            );
-        }
-        catch(e) {
-            this.log.warn(
-                'Failed to fetch events batch ' + startBlock + '-' + endBlock + ': ' + e.message
-            );
-            await new Promise(r => setTimeout(r, 3000));
+        while(true) {
+            try {
+                return await this.contract.queryFilter(
+                    filter,
+                    startBlock,
+                    endBlock
+                );
+            }
+            catch(e) {
+                this.log.warn(
+                    'Failed to fetch events batch ' + startBlock + '-' + endBlock + ': ' + e.message
+                );
+                await new Promise(r => setTimeout(r, 3000));
+            }
         }
     }
     
@@ -205,8 +207,9 @@ export default class Chain {
     
     async listener(database, signer, filter, epochUpdateCallback) {
         const block = await this.getBlock('latest');
+        const prevBlock = this.listenerBlock || (await database.getSyncState(this.chainId)).latestBlock + 1;
         
-        if(!this.listenerBlock || block.number > this.listenerBlock) {
+        if(block.number > prevBlock) {
             const epoch = timestampToEpoch(block.timestamp);
             const epochUpdate = epoch != this.listenerEpoch;
             if(epochUpdate)
@@ -216,7 +219,7 @@ export default class Chain {
                 database,
                 signer,
                 filter,
-                this.listenerBlock || (await database.getSyncState(this.chainId)).latestBlock + 1,
+                prevBlock,
                 block.number,
                 true
             );
