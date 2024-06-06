@@ -47,7 +47,7 @@ export default class DstChain extends Chain {
     async checkOnRelayersList(walletAddress, srcChainId, messageHash, epoch) {
         while(true) {
             try {
-                const relayers = await this.dstContract.messageGetRelayers(
+                const relayers = await this.contract.messageGetRelayers(
                     srcChainId,
                     messageHash,
                     epoch
@@ -57,7 +57,7 @@ export default class DstChain extends Chain {
             }
             catch(e) {
                 this.log.warn('Failed to get message relayers: ' + e.message);
-                r => setTimeout(r, 3000)
+                await new Promise(r => setTimeout(r, 3000));
             }
         }
     }
