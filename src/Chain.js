@@ -76,7 +76,7 @@ export default class Chain {
         }
     }
     
-    async syncForward(database, filter, fromBlock, toBlock, listener = false) {
+    async syncForward(database, signer, filter, fromBlock, toBlock, listener = false) {
         if(!listener) this.log.info(
             'Starting forward sync from block ' + fromBlock + ' to block ' + toBlock
         );
@@ -90,7 +90,7 @@ export default class Chain {
             const events = await this.syncFetchEventsBatch(filter, startBlock, endBlock);
             
             for(const event of events)
-                await this.messageCallback(database, event, null);
+                await this.messageCallback(database, signer, event, null);
             
             await database.setSyncStateForward(this.chainId, endBlock);
             
@@ -114,7 +114,7 @@ export default class Chain {
         if(!listener) this.log.info('Forward sync done');
     }
     
-    async syncBackward(database, filter, fromBlock, toEpoch) {
+    async syncBackward(database, signer, filter, fromBlock, toEpoch) {
         this.log.info(
             'Starting backward sync from block ' + fromBlock + ' to epoch ' + toEpoch
         );
@@ -134,7 +134,7 @@ export default class Chain {
                 if(eventEpoch < toEpoch)
                     break;
                 
-                await this.messageCallback(database, event, eventEpoch);
+                await this.messageCallback(database, signer, event, eventEpoch);
             }
             
             const oldestSyncedEpoch = timestampToEpoch((await this.getBlock(startBlock)).timestamp) + 1;
@@ -168,7 +168,7 @@ export default class Chain {
         this.log.info('Backward sync done');
     }
     
-    async sync(database, actEpoch, oppositeChainId) {
+    async sync(database, signer, actEpoch, oppositeChainId) {
         const syncState = await database.getSyncState(this.chainId);
         const currentBlock = (await this.getBlock('latest')).number;
         let syncRanges = [];
@@ -196,19 +196,20 @@ export default class Chain {
         
         for(const range of syncRanges)
             if(range.order == 'forward')
-                await this.syncForward(database, this.getFilter(oppositeChainId), range.fromBlock, range.toBlock);
+                await this.syncForward(database, signer, this.getFilter(oppositeChainId), range.fromBlock, range.toBlock);
             else
-                await this.syncBackward(database, this.getFilter(oppositeChainId), range.fromBlock, range.toEpoch);
+                await this.syncBackward(database, signer, this.getFilter(oppositeChainId), range.fromBlock, range.toEpoch);
         
         this.log.info('Chain sync done');
     }
     
-    async listener(database, filter) {
+    async listener(database, filter, epochUpdateCallback) {
         const block = await this.getBlock('latest');
         
         if(!this.listenerBlock || block.number > this.listenerBlock) {
             const epoch = timestampToEpoch(block.timestamp);
-            if(epoch != this.listenerEpoch)
+            const epochUpdate = epoch != this.listenerEpoch;
+            if(epochUpdate)
                 this.listenerEpoch = epoch;
             
             await this.syncForward(
@@ -219,13 +220,16 @@ export default class Chain {
                 true
             );
             this.listenerBlock = block.number;
+            
+            if(epochUpdateCallback && epochUpdate)
+                epochUpdateCallback(epoch);
         }
         
-        setTimeout(() => { this.listener(database, filter) }, 5000);
+        setTimeout(() => { this.listener(database, filter, epochUpdateCallback) }, 5000);
     }
     
-    async startListener(database, oppositeChainId) {
-        await this.listener(database, this.getFilter(oppositeChainId));
+    async startListener(database, oppositeChainId, epochUpdateCallback = null) {
+        await this.listener(database, this.getFilter(oppositeChainId), epochUpdateCallback);
         this.log.info('Started listening for new messages');
     }
 }

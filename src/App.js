@@ -4,6 +4,7 @@ import DstChain from './DstChain.js';
 import Wallet from './Wallet.js';
 import Synapse from './Synapse.js';
 import Database from './Database.js';
+import Signer from './Signer.js';
 import { homeChainId } from './configs/chains.js';
 
 export default class App {
@@ -15,6 +16,7 @@ export default class App {
         this.wallet = new Wallet(options.walletKey);
         this.synapse = new Synapse();
         this.database = new Database();
+        this.signer = new Signer();
     }
     
     async run() {
@@ -47,15 +49,17 @@ export default class App {
         if(!await this.database.start(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address))
             process.exit(7);
         
+        this.signer.start(this.wallet, this.database, this.srcChain.chainId, this.dstChain, this.synapse);
+        
         await Promise.all([
-            this.srcChain.sync(this.database, this.dstChain.relayerStatusEpoch, this.dstChain.chainId),
-            this.dstChain.sync(this.database, this.dstChain.relayerStatusEpoch, this.srcChain.chainId)
+            this.srcChain.sync(this.database, this.signer, this.dstChain.relayerStatusEpoch, this.dstChain.chainId),
+            this.dstChain.sync(this.database, this.signer, this.dstChain.relayerStatusEpoch, this.srcChain.chainId)
         ]);
         this.log.info('Both chains synced');
         
         await this.srcChain.startListener(this.database, this.dstChain.chainId);
-        await this.dstChain.startListener(this.database, this.srcChain.chainId);
+        await this.dstChain.startListener(this.database, this.srcChain.chainId, (epoch) => { this.signer.autoRetry(epoch) });
         
-        await this.synapse.subscribeRetry(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address);
+        this.synapse.subscribeRetry(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address);
     }
 }

@@ -24,4 +24,10 @@ export default class Wallet {
             return false;
         }
     }
+    
+    async signEpochHash(epochHash) {
+        return ethers.Signature.from(
+            await this.wallet.signMessage(ethers.getBytes(epochHash))
+        );
+    }
 }

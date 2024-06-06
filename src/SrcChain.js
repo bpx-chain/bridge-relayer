@@ -14,16 +14,19 @@ export default class SrcChain extends Chain {
         return this.contract.filters.MessageCreated(oppositeChainId);
     }
     
-    async messageCallback(database, event, eventEpoch) {
+    async messageCallback(database, signer, event, eventEpoch) {
         if(!eventEpoch)
             eventEpoch = timestampToEpoch((await this.getBlock(event.blockNumber)).timestamp);
         
+        const messageHash = ethers.keccak256(event.args[2]);
+        
         await database.insertMessageSrcChain(
-            ethers.keccak256(event.args[2]),
+            messageHash,
+            event.args[1],
             eventEpoch
         );
         
-        if(this.listenerEpoch && this.listenerEpoch - eventEpoch <= 3)
-            await this.maybeSignMessage(event);
+        if(this.listenerEpoch && this.listenerEpoch - eventEpoch <= 2)
+            await signer.maybeSign(messageHash, event.args[1]);
     }
 }

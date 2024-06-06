@@ -43,4 +43,27 @@ export default class DstChain extends Chain {
     async messageCallback(database, event, eventEpoch) {
         await database.insertMessageDstChain(event.args[1]);
     }
+    
+    async checkOnRelayersList(walletAddress, srcChainId, messageHash, epoch) {
+        while(true) {
+            try {
+                const relayers = await this.dstContract.messageGetRelayers(
+                    srcChainId,
+                    messageHash,
+                    epoch
+                );
+                
+                return relayers.includes(walletAddress);
+            );
+            }
+            catch(e) {
+                this.log.warn('Failed to get message relayers: ' + e.message);
+                r => setTimeout(r, 3000)
+            }
+        }
+    }
+    
+    async onEpochUpdate(epoch) {
+        //
+    }
 }

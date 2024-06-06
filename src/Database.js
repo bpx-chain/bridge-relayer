@@ -28,6 +28,7 @@ export default class Database {
                 `CREATE TABLE IF NOT EXISTS messages(
                     messageHash BLOB NOT NULL PRIMARY KEY,
                     executed TINYINT NOT NULL,
+                    userWallet VARCHAR(42),
                     epoch INT
                 )`
             );
@@ -93,7 +94,7 @@ export default class Database {
     
     async getValidMessages(minEpoch) {
         return await this.db.all(
-            `SELECT messageHash
+            `SELECT messageHash, userWallet
             FROM messages
             WHERE executed = 0
             AND epoch >= ?
@@ -102,9 +103,9 @@ export default class Database {
         );
     }
     
-    async insertMessageSrcChain(messageHash, epoch) {
+    async insertMessageSrcChain(messageHash, userWallet, epoch) {
         await this.db.run(
-            `INSERT OR IGNORE INTO messages(messageHash, executed, epoch)
+            `INSERT OR IGNORE INTO messages(messageHash, executed, userWallet, epoch)
             VALUES(?, 0, ?)`,
             Buffer.from(messageHash.substring(2), 'hex'),
             epoch
@@ -113,8 +114,8 @@ export default class Database {
     
     async insertMessageDstChain(messageHash) {
         await this.db.run(
-            `INSERT OR REPLACE INTO messages(messageHash, executed, epoch)
-            VALUES(?, 1, NULL)`,
+            `INSERT OR REPLACE INTO messages(messageHash, executed, userWallet, epoch)
+            VALUES(?, 1, NULL, NULL)`,
             Buffer.from(messageHash.substring(2), 'hex')
         );
     }
