@@ -55,7 +55,7 @@ export default class Chain {
             }
             catch(e) {
                 this.log.warn('Failed to get block: ' + e.message);
-                r => setTimeout(r, 3000)
+                await new Promise(r => setTimeout(r, 3000));
             }
         }
     }
