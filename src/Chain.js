@@ -91,7 +91,7 @@ export default class Chain {
             const events = await this.syncFetchEventsBatch(filter, startBlock, endBlock);
             
             for(const event of events)
-                await callback(event);
+                await callback(event, null);
             
             await database.setSyncStateForward(this.chainId, endBlock);
             
@@ -135,7 +135,7 @@ export default class Chain {
                 if(eventEpoch < toEpoch)
                     break;
                 
-                callback(event);
+                callback(event, eventEpoch);
             }
             
             const oldestSyncedEpoch = timestampToEpoch((await this.getBlock(startBlock)).timestamp) + 1;

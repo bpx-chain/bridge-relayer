@@ -87,7 +87,7 @@ export default class Database {
             FROM messages
             WHERE messageHash = ?
             AND executed = 0`,
-            messageHash
+            Buffer.from(messageHash.substring(2), 'hex')
         );
     }
     
@@ -106,7 +106,7 @@ export default class Database {
         await this.db.run(
             `INSERT OR IGNORE INTO messages(messageHash, executed, epoch)
             VALUES(?, 0, ?)`,
-            messageHash,
+            Buffer.from(messageHash.substring(2), 'hex'),
             epoch
         );
     }
@@ -115,7 +115,7 @@ export default class Database {
         await this.db.run(
             `INSERT OR REPLACE INTO messages(messageHash, executed, epoch)
             VALUES(?, 1, NULL)`,
-            messageHash
+            Buffer.from(messageHash.substring(2), 'hex')
         );
     }
 }
