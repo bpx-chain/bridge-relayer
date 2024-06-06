@@ -215,7 +215,7 @@ export default class Chain {
             await this.syncForward(
                 database,
                 filter,
-                this.listenerBlock || (await database.getSyncState()).latestBlock + 1,
+                this.listenerBlock || (await database.getSyncState(this.chainId)).latestBlock + 1,
                 block.number,
                 true
             );
