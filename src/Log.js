@@ -2,7 +2,7 @@ import chalk from 'chalk';
 
 export default class Log {
     constructor(module) {
-        this.module = module.substring(0, 20);
+        this.module = module.substring(0, 9);
     }
     
     log(level, msg) {
@@ -24,7 +24,7 @@ export default class Log {
             levelText +
             ' ' +
             chalk.blue('[' + this.module + ']') +
-            ' '.repeat(20 - this.module.length + 1) +
+            ' '.repeat(9 - this.module.length + 1) +
             msg
         );
     }

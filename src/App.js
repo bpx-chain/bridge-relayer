@@ -26,7 +26,7 @@ export default class App {
         if(!await this.srcChain.start())
             process.exit(2);
         
-        if(!await this.dstChain.start())
+        if(!await this.dstChain.start(this.srcChain.chainId, this.wallet.address))
             process.exit(3);
         
         if(this.srcChain.chainId == this.dstChain.chainId) {
@@ -46,5 +46,11 @@ export default class App {
         
         if(!await this.database.start(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address))
             process.exit(7);
+        
+        await Promise.all([
+            this.srcChain.sync(this.database, this.dstChain.relayerStatusEpoch, this.dstChain.chainId),
+            this.dstChain.sync(this.database, this.dstChain.relayerStatusEpoch, this.srcChain.chainId)
+        ]);
+        this.log.info('Both chains synced');
     }
 }

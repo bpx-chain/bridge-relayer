@@ -1,4 +1,4 @@
-export default const bridgeAbi = [
+export const abiBridge = [
     "event MessageCreated(uint256 indexed chainId, address indexed from, bytes message)",
     "event MessageProcessed(uint256 indexed chainId, bytes32 messageHash)",
     "function assetResolve(uint256 chainId, address contractLocal) view returns (address)",

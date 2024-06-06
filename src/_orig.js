@@ -1,14 +1,5 @@
 
             
-            this.srcContract = new ethers.Contract(srcContractAddr, abi, this.srcProvider);
-            this.dstContract = new ethers.Contract(dstContractAddr, abi, this.dstProvider);
-            const relayerStatus = await this.dstContract.relayerGetStatus(this.srcChainId, this.wallet.address);
-            if(relayerStatus[0] == false)
-                throw new Error('Relayer inactive since epoch ' + relayerStatus[1]);
-            this.log('info', 'Relayer active since epoch ' + relayerStatus[1]);
-            
-            
-            
             const retryContentTopic = '/bridge/1/retry-' + this.srcChainId + '-' + dstChainId
                 + '-' + this.wallet.address.toLowerCase() + '/json';
             const decoder = createDecoder(
@@ -46,10 +37,7 @@
             process.exit(1);
         }
     }
-    
-    timestampToEpoch(timestamp) {
-        return Math.floor(timestamp / 60 / 20); // 20 minutes
-    }
+   
     
     onDstNewBlock(block) {
     console.log(block);
