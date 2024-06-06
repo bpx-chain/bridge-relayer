@@ -105,8 +105,9 @@ export default class Database {
     async insertMessageSrcChain(messageHash, userWallet, epoch) {
         await this.db.run(
             `INSERT OR IGNORE INTO messages(messageHash, executed, userWallet, epoch)
-            VALUES(?, 0, ?)`,
+            VALUES(?, 0, ?, ?)`,
             Buffer.from(messageHash.substring(2), 'hex'),
+            userWallet,
             epoch
         );
     }
