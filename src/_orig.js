@@ -1,54 +1,5 @@
 
             
-            const retryContentTopic = '/bridge/1/retry-' + this.srcChainId + '-' + dstChainId
-                + '-' + this.wallet.address.toLowerCase() + '/json';
-            const decoder = createDecoder(
-                retryContentTopic,
-                this.pubsubTopic
-            );
-            const subscription = await this.synapse.filter.subscribe(
-                [decoder],
-                function(msg) {
-                    th.onSynapseRetryMessage(msg);
-                }
-            );
-            this.log('info', 'Subscribed to retry topic: ' + retryContentTopic);
-            
-            const block = await this.dstProvider.getBlock('latest');
-            if(!block)
-                throw new Error('Cannot get latest destination chain block');
-            this.onDstNewBlock(block);
-            
-            this.dstProvider.on("block", async function(blockNumber) {
-                const block = await th.dstProvider.getBlock(blockNumber);
-                th.onDstNewBlock(block);
-            });
-            this.log('info', 'Subscribed to epoch updates');
-            
-            this.srcContract.on(
-                this.srcContract.filters.MessageCreated(dstChainId),
-                function(chainId, from, message) {
-                    th.onSrcNewMessage(from, message);
-                }
-            );
-            this.log('info', 'Subscribed to source contract events');
-        } catch(e) {
-            this.log('error', e.message);
-            process.exit(1);
-        }
-    }
-   
-    
-    onDstNewBlock(block) {
-    console.log(block);
-        const newEpoch = this.timestampToEpoch(block.timestamp);
-        if(newEpoch <= this.epoch)
-            return;
-        
-        this.epoch = newEpoch;
-        this.log('info', 'New epoch: ' + newEpoch);
-    }
-    
     async onSrcNewMessage(from, message) {
         try {
             this.log('info', 'New message from ' + from + ': ' + message);
@@ -106,32 +57,6 @@
     }
     
     async onSynapseRetryMessage(msgRaw) {
-        let msg;
         
-        try {
-            const msg = JSON.parse(new TextDecoder().decode(msgRaw.payload));
-            
-            if(typeof msg.transactionHash != 'string')
-                throw new Error('Invalid JSON message structure');
-            
-            if(!msg.transactionHash.match(/^0x[0-9a-fA-F]{64}$/))
-                throw new Error('Validation error: transactionHash');
-            
-            let receipt;
-            try {
-                receipt = await this.srcProvider.getTransactionReceipt(msg.txid);
-            } catch(e) {
-                setTimeout(() => { this.onSynapseRetryMessage(msgRaw) }, 3000);
-                throw e;
-            }
-        
-            if(receipt === null)
-                throw new Error('Transaction receipt is null');
-            
-            console.log(receipt);
-        }
-        catch(e) {
-            this.log('error', 'Exception in retry request processing: ' + e.message);
-        }
     }
     

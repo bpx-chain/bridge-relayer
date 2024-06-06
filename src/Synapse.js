@@ -20,7 +20,7 @@ export default class Synapse {
         this.pubsubTopic = null;
     }
     
-    async start(srcChainId, dstChainId, walletAddress) {
+    async start() {
         try {
             this.log.info('Connecting to Synapse P2P network...');
             
@@ -47,5 +47,41 @@ export default class Synapse {
             this.log.error('Synapse error: ' + e.message);
             return false;
         }
+    }
+    
+    async retryMessageCallback(msgRaw) {
+        try {
+            if(!msgRaw.payload)
+                throw new Error('Message does not contain a payload');
+            
+            const msg = JSON.parse(new TextDecoder().decode(msgRaw.payload));
+            
+            if(typeof msg.messageHash != 'string')
+                throw new Error('Invalid JSON message structure');
+            
+            if(!msg.messageHash.match(/^0x[0-9a-fA-F]{64}$/))
+                throw new Error('Validation error: messageHash');
+            
+            //
+        }
+        catch(e) {
+            this.log.warn('Exception in retry request processing: ' + e.message);
+        }
+    }
+    
+    async subscribeRetry(srcChainId, dstChainId, walletAddress) {
+        const retryContentTopic = '/bridge/1/retry-' + srcChainId + '-' + dstChainId
+                + '-' + walletAddress.toLowerCase() + '/json';
+        const decoder = createDecoder(
+            retryContentTopic,
+            this.pubsubTopic
+        );
+        
+        await this.synapse.filter.subscribe(
+            [decoder],
+            (msg) => { this.retryMessageCallback(msg) }
+        );
+        
+        this.log.info('Subscribed to retry topic: ' + retryContentTopic);
     }
 }

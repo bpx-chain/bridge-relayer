@@ -36,14 +36,11 @@ export default class DstChain extends Chain {
         }
     }
     
-    async sync(database, actEpoch, oppositeChainId) {
-        return await this._sync(
-            database,
-            actEpoch,
-            this.contract.filters.MessageProcessed(oppositeChainId),
-            async function(event, eventEpoch) {
-                await database.insertMessageDstChain(event.args[1]);
-            }
-        );
+    getFilter(oppositeChainId) {
+        return this.contract.filters.MessageProcessed(oppositeChainId);
+    }
+    
+    async messageCallback(database, event, eventEpoch) {
+        await database.insertMessageDstChain(event.args[1]);
     }
 }

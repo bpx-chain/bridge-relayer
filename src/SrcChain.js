@@ -10,19 +10,20 @@ export default class SrcChain extends Chain {
         this.log = new Log('SrcChain');
     }
     
-    async sync(database, actEpoch, oppositeChainId) {
-        const th = this;
+    getFilter(oppositeChainId) {
+        return this.contract.filters.MessageCreated(oppositeChainId);
+    }
+    
+    async messageCallback(database, event, eventEpoch) {
+        if(!eventEpoch)
+            eventEpoch = timestampToEpoch((await this.getBlock(event.blockNumber)).timestamp);
         
-        return await this._sync(
-            database,
-            actEpoch,
-            this.contract.filters.MessageCreated(oppositeChainId),
-            async function(event, eventEpoch) {
-                await database.insertMessageSrcChain(
-                    ethers.keccak256(event.args[2]),
-                    eventEpoch || timestampToEpoch((await th.getBlock(event.blockNumber)).timestamp)
-                );
-            }
+        await database.insertMessageSrcChain(
+            ethers.keccak256(event.args[2]),
+            eventEpoch
         );
+        
+        if(this.listenerEpoch && this.listenerEpoch - eventEpoch <= 3)
+            await this.maybeSignMessage(event);
     }
 }

@@ -41,7 +41,7 @@ export default class App {
         
         this.log.info('Initialized both chains');
         
-        if(!await this.synapse.start(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address))
+        if(!await this.synapse.start())
             process.exit(6);
         
         if(!await this.database.start(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address))
@@ -52,5 +52,10 @@ export default class App {
             this.dstChain.sync(this.database, this.dstChain.relayerStatusEpoch, this.srcChain.chainId)
         ]);
         this.log.info('Both chains synced');
+        
+        await this.srcChain.startListener(this.database, this.dstChain.chainId);
+        await this.dstChain.startListener(this.database, this.srcChain.chainId);
+        
+        await this.synapse.subscribeRetry(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address);
     }
 }

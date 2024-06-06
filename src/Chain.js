@@ -10,6 +10,8 @@ export default class Chain {
         this.chainId = null;
         this.chainName = null;
         this.contract = null;
+        this.listenerBlock = null;
+        this.listenerEpoch = null;
         
         if(rpc.startsWith('ws'))
             this.provider = new ethers.WebSocketProvider(rpc);
@@ -74,8 +76,8 @@ export default class Chain {
         }
     }
     
-    async syncForward(database, filter, callback, fromBlock, toBlock) {
-        this.log.info(
+    async syncForward(database, filter, fromBlock, toBlock, listener = false) {
+        if(!listener) this.log.info(
             'Starting forward sync from block ' + fromBlock + ' to block ' + toBlock
         );
             
@@ -88,11 +90,11 @@ export default class Chain {
             const events = await this.syncFetchEventsBatch(filter, startBlock, endBlock);
             
             for(const event of events)
-                await callback(event, null);
+                await this.messageCallback(database, event, null);
             
             await database.setSyncStateForward(this.chainId, endBlock);
             
-            if(Date.now() - logTimestamp > 15000) {
+            if(!listener && Date.now() - logTimestamp > 15000) {
                 const perc = Math.round(
                     (endBlock - fromBlock)
                     / (toBlock - fromBlock)
@@ -109,10 +111,10 @@ export default class Chain {
             startBlock = endBlock + 1;
         }
         
-        this.log.info('Forward sync done');
+        if(!listener) this.log.info('Forward sync done');
     }
     
-    async syncBackward(database, filter, callback, fromBlock, toEpoch) {
+    async syncBackward(database, filter, fromBlock, toEpoch) {
         this.log.info(
             'Starting backward sync from block ' + fromBlock + ' to epoch ' + toEpoch
         );
@@ -132,7 +134,7 @@ export default class Chain {
                 if(eventEpoch < toEpoch)
                     break;
                 
-                callback(event, eventEpoch);
+                await this.messageCallback(database, event, eventEpoch);
             }
             
             const oldestSyncedEpoch = timestampToEpoch((await this.getBlock(startBlock)).timestamp) + 1;
@@ -166,7 +168,7 @@ export default class Chain {
         this.log.info('Backward sync done');
     }
     
-    async _sync(database, actEpoch, filter, callback) {
+    async sync(database, actEpoch, oppositeChainId) {
         const syncState = await database.getSyncState(this.chainId);
         const currentBlock = (await this.getBlock('latest')).number;
         let syncRanges = [];
@@ -194,10 +196,36 @@ export default class Chain {
         
         for(const range of syncRanges)
             if(range.order == 'forward')
-                await this.syncForward(database, filter, callback, range.fromBlock, range.toBlock);
+                await this.syncForward(database, this.getFilter(oppositeChainId), range.fromBlock, range.toBlock);
             else
-                await this.syncBackward(database, filter, callback, range.fromBlock, range.toEpoch);
+                await this.syncBackward(database, this.getFilter(oppositeChainId), range.fromBlock, range.toEpoch);
         
         this.log.info('Chain sync done');
+    }
+    
+    async listener(database, filter) {
+        const block = await this.getBlock('latest');
+        
+        if(!this.listenerBlock || block.number > this.listenerBlock) {
+            const epoch = timestampToEpoch(block.timestamp);
+            if(epoch != this.listenerEpoch)
+                this.listenerEpoch = epoch;
+            
+            await this.syncForward(
+                database,
+                filter,
+                this.listenerBlock || (await database.getSyncState()).latestBlock + 1,
+                block.number,
+                true
+            );
+            this.listenerBlock = block.number;
+        }
+        
+        setTimeout(() => { this.listener(database, filter) }, 5000);
+    }
+    
+    async startListener(database, oppositeChainId) {
+        await this.listener(database, this.getFilter(oppositeChainId));
+        this.log.info('Started listening for new messages');
     }
 }
