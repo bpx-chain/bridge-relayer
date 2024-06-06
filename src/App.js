@@ -60,6 +60,6 @@ export default class App {
         await this.srcChain.startListener(this.database, this.dstChain.chainId);
         await this.dstChain.startListener(this.database, this.srcChain.chainId, (epoch) => { this.signer.autoRetry(epoch) });
         
-        this.synapse.subscribeRetry(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address);
+        this.synapse.subscribeRetry(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address, this.database, this.signer);
     }
 }

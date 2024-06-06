@@ -82,12 +82,11 @@ export default class Database {
             );
     }
     
-    async isValidMessage(messageHash) {
-        return !! await this.db.get(
-            `SELECT 1
+    async getMessage(messageHash) {
+        return await this.db.get(
+            `SELECT *
             FROM messages
-            WHERE messageHash = ?
-            AND executed = 0`,
+            WHERE messageHash = ?`,
             Buffer.from(messageHash.substring(2), 'hex')
         );
     }
