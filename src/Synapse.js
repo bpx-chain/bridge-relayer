@@ -91,4 +91,27 @@ export default class Synapse {
         
         this.log.info('Subscribed to retry topic: ' + retryContentTopic);
     }
+    
+    async sendSignature(to, messageHash, epoch, signature) {
+        const msg = {
+            messageHash,
+            epoch: epoch,
+            v: sig.v,
+            r: sig.r,
+            s: sig.s
+        };
+        
+        const encoder = createEncoder({
+            contentTopic: '/bridge/1/client-' + to.toLowerCase() + '/json',
+            pubsubTopic: this.pubsubTopic
+        });
+        const result = await this.synapse.lightPush.send(encoder, {
+            payload: utf8ToBytes(JSON.stringify(response))
+        });
+        
+        if(result.successes.length)
+            this.log.info('Sent signature of message ' + messageHash + ' to ' + to);
+        else
+            this.log.error('Failed to send signature of message ' + messageHash + ' to ' + to);
+    }
 }
