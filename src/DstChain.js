@@ -54,16 +54,11 @@ export default class DstChain extends Chain {
                 );
                 
                 return relayers.includes(walletAddress);
-            );
             }
             catch(e) {
                 this.log.warn('Failed to get message relayers: ' + e.message);
                 r => setTimeout(r, 3000)
             }
         }
-    }
-    
-    async onEpochUpdate(epoch) {
-        //
     }
 }
