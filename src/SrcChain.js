@@ -1,10 +1,13 @@
 import { ethers } from 'ethers';
 
 import Chain from './Chain.js';
+import Log from './Log.js';
 
 export default class SrcChain extends Chain {
     constructor(rpc) {
-        super('src', rpc);
+        super(rpc);
+        
+        this.log = new Log('SrcChain');
     }
     
     async sync(database, actEpoch, oppositeChainId) {

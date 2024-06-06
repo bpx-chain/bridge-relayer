@@ -1,14 +1,11 @@
 import { ethers } from 'ethers';
 
-import Log from './Log.js';
 import { chainName, bridgeContracts } from './configs/chains.js';
 import { abiBridge } from './configs/abiBridge.js';
 import timestampToEpoch from './utils/timestampToEpoch.js';
 
 export default class Chain {
-    constructor(instanceId, rpc) {
-        this.log = new Log('Chain:' + instanceId);
-        
+    constructor(rpc) {
         this.rpc = rpc;
         this.chainId = null;
         this.chainName = null;

@@ -1,8 +1,11 @@
 import Chain from './Chain.js';
+import Log from './Log.js';
 
 export default class DstChain extends Chain {
     constructor(rpc) {
-        super('dst', rpc);
+        super(rpc);
+        
+        this.log = new Log('DstChain');
         
         this.relayerStatus = null;
         this.relayerStatusEpoch = null;
