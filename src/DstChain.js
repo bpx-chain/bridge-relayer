@@ -40,7 +40,7 @@ export default class DstChain extends Chain {
         return this.contract.filters.MessageProcessed(oppositeChainId);
     }
     
-    async messageCallback(database, event, eventEpoch) {
+    async messageCallback(database, signer, event, eventEpoch) {
         await database.insertMessageDstChain(event.args[1]);
     }
     
