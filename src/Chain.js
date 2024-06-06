@@ -203,7 +203,7 @@ export default class Chain {
         this.log.info('Chain sync done');
     }
     
-    async listener(database, filter, epochUpdateCallback) {
+    async listener(database, signer, filter, epochUpdateCallback) {
         const block = await this.getBlock('latest');
         
         if(!this.listenerBlock || block.number > this.listenerBlock) {
@@ -214,6 +214,7 @@ export default class Chain {
             
             await this.syncForward(
                 database,
+                signer,
                 filter,
                 this.listenerBlock || (await database.getSyncState(this.chainId)).latestBlock + 1,
                 block.number,
@@ -225,11 +226,11 @@ export default class Chain {
                 epochUpdateCallback(epoch);
         }
         
-        setTimeout(() => { this.listener(database, filter, epochUpdateCallback) }, 5000);
+        setTimeout(() => { this.listener(database, signer, filter, epochUpdateCallback) }, 5000);
     }
     
-    async startListener(database, oppositeChainId, epochUpdateCallback = null) {
-        await this.listener(database, this.getFilter(oppositeChainId), epochUpdateCallback);
+    async startListener(database, signer, oppositeChainId, epochUpdateCallback = null) {
+        await this.listener(database, signer, this.getFilter(oppositeChainId), epochUpdateCallback);
         this.log.info('Started listening for new messages');
     }
 }

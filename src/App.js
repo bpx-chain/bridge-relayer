@@ -57,8 +57,8 @@ export default class App {
         ]);
         this.log.info('Both chains synced');
         
-        await this.srcChain.startListener(this.database, this.dstChain.chainId);
-        await this.dstChain.startListener(this.database, this.srcChain.chainId, (epoch) => { this.signer.autoRetry(epoch) });
+        await this.srcChain.startListener(this.database, this.signer, this.dstChain.chainId);
+        await this.dstChain.startListener(this.database, this.signer, this.srcChain.chainId, (epoch) => { this.signer.autoRetry(epoch) });
         
         this.synapse.subscribeRetry(this.srcChain.chainId, this.dstChain.chainId, this.wallet.address, this.database, this.signer);
     }
