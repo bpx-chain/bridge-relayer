@@ -106,7 +106,7 @@ export default class Synapse {
             pubsubTopic: this.pubsubTopic
         });
         const result = await this.synapse.lightPush.send(encoder, {
-            payload: utf8ToBytes(JSON.stringify(response))
+            payload: utf8ToBytes(JSON.stringify(msg))
         });
         
         if(result.successes.length)
