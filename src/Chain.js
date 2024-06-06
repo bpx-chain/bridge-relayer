@@ -212,8 +212,10 @@ export default class Chain {
         if(block.number > prevBlock) {
             const epoch = timestampToEpoch(block.timestamp);
             const epochUpdate = epoch != this.listenerEpoch;
-            if(epochUpdate)
+            if(epochUpdate) {
                 this.listenerEpoch = epoch;
+                this.log.info('New epoch: ' + epoch);
+            }
             
             await this.syncForward(
                 database,
