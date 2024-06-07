@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 
 import Chain from './Chain.js';
 import Log from './Log.js';
+import timestampToEpoch from './utils/timestampToEpoch.js';
 
 export default class SrcChain extends Chain {
     constructor(rpc) {
