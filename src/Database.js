@@ -92,14 +92,17 @@ export default class Database {
     }
     
     async getValidMessages(minEpoch) {
-        return await this.db.all(
+        return (await this.db.all(
             `SELECT messageHash, userWallet
             FROM messages
             WHERE executed = 0
             AND epoch >= ?
             `,
             minEpoch
-        );
+        )).map((row) => ({
+            messageHash: '0x' + Buffer.from(row.messageHash).toString('hex'),
+            userWallet: row.userWallet
+        }));
     }
     
     async insertMessageSrcChain(messageHash, userWallet, epoch) {
