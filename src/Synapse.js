@@ -56,11 +56,14 @@ export default class Synapse {
             
             const msg = JSON.parse(new TextDecoder().decode(msgRaw.payload));
             
-            if(typeof msg.messageHash != 'string')
+            if(typeof msg.messageHash != 'string' || typeof msg.epoch != 'number')
                 throw new Error('Invalid JSON message structure');
             
             if(!msg.messageHash.match(/^0x[0-9a-fA-F]{64}$/))
                 throw new Error('Validation error: messageHash');
+            
+            if(!Number.isInteger(msg.epoch) || msg.epoch < 1)
+                throw new Error('Validation error: epoch');
             
             const dbMessage = await database.getMessage(msg.messageHash);
             if(!dbMessage)
@@ -69,7 +72,7 @@ export default class Synapse {
             if(dbMessage.executed)
                 throw new Error('Message already processed');
             
-            await signer.maybeSign(msg.messageHash, dbMessage.userWallet);
+            await signer.maybeSign(msg.messageHash, dbMessage.userWallet, msg.epoch);
         }
         catch(e) {
             this.log.warn('Exception in retry request processing: ' + e.message);

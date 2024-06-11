@@ -23,27 +23,30 @@ export default class Signer {
         this.log.info('Started signer');
     }
     
-    async maybeSign(messageHash, userWallet) {
-        if(!this.dstChain.listenerEpoch || !this.dstChain.checkOnRelayersList(
+    async maybeSign(messageHash, userWallet, sigEpoch = null) {
+        if(!sigEpoch)
+            sigEpoch = this.dstChain.listenerEpoch;
+        
+        if(!this.dstChain.checkOnRelayersList(
             this.wallet.address,
             this.srcChainId,
             messageHash,
-            this.dstChain.listenerEpoch
+            sigEpoch
         ))
             return;
         
-        this.log.info('Delegated to sign message ' + messageHash + ' in epoch ' + this.dstChain.listenerEpoch);
+        this.log.info('Delegated to sign message ' + messageHash + ' in epoch ' + sigEpoch);
         
         const epochHash = ethers.solidityPackedKeccak256(
             ['bytes32', 'uint64'],
-            [messageHash, this.dstChain.listenerEpoch]
+            [messageHash, sigEpoch]
         );
         this.log.info('Calculated epoch hash for message ' + messageHash + ': ' + epochHash);
         
         const sig = await this.wallet.signEpochHash(epochHash);
         this.log.info('Signed message ' + messageHash);
         
-        this.synapse.sendSignature(userWallet, messageHash, this.dstChain.listenerEpoch, sig);
+        this.synapse.sendSignature(userWallet, messageHash, sigEpoch, sig);
     }
     
     async autoRetry(epoch) {
