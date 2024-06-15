@@ -27,7 +27,7 @@ export default class Signer {
         if(!sigEpoch)
             sigEpoch = this.dstChain.listenerEpoch;
         
-        if(!this.dstChain.checkOnRelayersList(
+        if(! await this.dstChain.checkOnRelayersList(
             this.wallet.address,
             this.srcChainId,
             messageHash,
